@@ -1,0 +1,184 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+from Tkinter import Tk, W, E
+from ttk import Frame, Button, Style
+from ttk import Entry
+
+
+def auto():
+ #!/usr/bin/python
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(1,0)
+
+def runauto():
+        auto()
+
+
+def manual():
+ #Función para el envio de datos en caso de presionar paro.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(2,0)
+
+def runmanual():
+        manual()
+
+
+def izq():
+ #Función para el envio de datos en caso de presionar giro izquierda.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(2,1)
+
+def runizq():
+        izq()
+
+
+def dcha():
+ #Función para el envio de datos en caso de presionar giro derecha.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(2,2)
+
+def rundcha():
+        dcha()
+
+
+def aizq():
+ #Función para el envio de datos en caso de presionaraproximación izquierda.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(2,3)
+
+def runaizq():
+        aizq()
+
+
+def adcha():
+ #Función para el envio de datos en caso de presionar hacia delanteaproximación derecha.
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+ writeNumber(2,4)
+
+def runadcha():
+        adcha()
+
+
+def delante():
+ #Función para el envio de datos en caso de presionar hacia delante.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+ writeNumber(2,5)
+
+def rundelante():
+        delante()
+
+def detras():
+ #Función para el envio de datos en caso de presionar retroceder.
+ import smbus
+ bus = smbus.SMBus(1)
+ address = 0x04
+ def writeNumber(v1,v2):
+         bus.write_i2c_block_data(address,v1,[v2]) 
+         return -1
+
+ writeNumber(2,6)
+
+def rundetras():
+        detras()
+# Declaración de tipo de boton, letra, y fuente.
+class Example(Frame):
+  
+    def __init__(self, parent):
+        Frame.__init__(self, parent)   
+         
+        self.parent = parent
+        self.initUI()
+
+        
+    def initUI(self):
+      
+        self.parent.title("control")
+        
+        Style().configure("TButton", padding=(0, 5, 0, 5), 
+            font='serif 10')
+        #Configuración de matriz de botones.
+        
+        self.columnconfigure(0, pad=3)
+        self.columnconfigure(1, pad=3)
+        self.columnconfigure(2, pad=3)
+        
+        self.rowconfigure(0, pad=3)
+        self.rowconfigure(1, pad=3)
+        self.rowconfigure(2, pad=3)
+        
+        entry = Entry(self)
+        #Asignación de fnciones a los diferentes botones de la matriz.
+        
+	aizq = Button(self,text="Aproximación izquierda", command=runaizq)
+        aizq.grid(row=0, column=0)
+        delante = Button(self,text="Aceleración", command=rundelante)
+        delante.grid(row=0, column=1)    
+        adcha = Button(self,text="Aproximación derecha", command=runadcha)
+        adcha.grid(row=0, column=2) 
+   
+        izq = Button(self,text="Izquierda", command=runizq)
+        izq.grid(row=1, column=0)
+        parada = Button(self,text="Parada", command=runmanual)
+        parada.grid(row=1, column=1)    
+        dcha = Button(self,text="Derecha", command=rundcha)
+        dcha.grid(row=1, column=2)    
+        
+	auto = Button(self,text="Evacuacion", command=runauto)
+        auto.grid(row=2, column=0)        
+        detras = Button(self,text="Detras", command=rundetras)
+        detras.grid(row=2, column=1)        
+        manual = Button(self,text="Manual", command=runmanual)
+        manual.grid(row=2, column=2) 
+        
+        self.pack()
+
+
+def main():
+  
+    root = Tk()
+    app = Example(root)
+    root.mainloop()  
+
+
+if __name__ == '__main__':
+    main()  
