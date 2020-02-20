@@ -1,0 +1,425 @@
+
+#include <Pozyx.h>
+#include <Pozyx_definitions.h>
+#include <Wire.h>
+
+////////////////////////////////////////////////
+////////////////// PARAMETROS //////////////////
+////////////////////////////////////////////////
+
+uint16_t remote_id = 0x6000;                            // Configurar para que funcione como dispositivo remoto.
+bool remote = false;                                    // Poner True para que funcione posicionamiento remoto.
+
+boolean use_processing = true;                         // Poner en True si se van a utilizar los valos de coordenadas en algoritmos externos.
+
+const uint8_t num_anchors = 4;                                    // El némero de "anchors"
+uint16_t anchors[num_anchors] = {0x6e7d, 0x6e44, 0x6932, 0x6e71};     // ID de las "anchors".
+int32_t anchors_x[num_anchors] = {5161, -4386, -4386, 5161};               // X- Coordenadas en mm
+int32_t anchors_y[num_anchors] = {0000, 7767,0000, 7995};                  // Y- Coordenadas en mm
+int32_t heights[num_anchors] = {1950, 762, 1190,2346};              // Z- Coordenas en mm
+
+uint8_t algorithm = POZYX_POS_ALG_UWB_ONLY;             // Segumiento de objetos rápidos.
+uint8_t dimension = POZYX_3D;                           // Dimemsión de posicionamiento.
+int32_t height = 250;                                  // Alrura d aproximada de la baliza maestra.
+////////////////////////////////////////////////
+/// 4 variables que generan las salidas digitales al Arduino controlador de motores.
+int aproxizquierda = 5;
+int aproxderecha = 4;
+int destinofinal = 6;
+int giroizquierda = 7;
+int giroderecha = 8;
+/// Variables para establecer los rangos en los que el robot debe girar.
+int rangoxinf ;
+int rangoxsup ;
+int rangoyinf ;
+int rangoysup ;
+int rangoxinfparoint ;
+int rangoxsupparoint ;
+int rangoyinfparoint ;
+int rangoysupparoint ;
+int rangoxinfparo ;
+int rangoxsupparo ;
+int rangoyinfparo ;
+int rangoysupparo ;
+int paro;
+/// Variables para realizar la media aritmética de la lectura de las Pozyx.
+int coorxsuma;
+int coorysuma;
+int coorxreal;
+int cooryreal;
+/// Variables que se usan para evitar que el robot repita acciones de giro.
+int doblegirox ; 
+int doblegiroy ;
+int posicionxvieja;
+int posicionxactual;
+int posicionyvieja;
+int posicionyactual;
+int actaproxarriba;
+int actaproxabajo;
+int actaproxderecha;
+int actaproxizquierda;
+int i;
+int j;
+int v;
+
+void setup(){
+  /// Declaración e inicialización de variables.
+  Serial.begin(115200);
+  pinMode(destinofinal, OUTPUT);
+  pinMode(aproxderecha, OUTPUT);
+  pinMode(aproxizquierda , OUTPUT);
+  pinMode(giroderecha, OUTPUT);
+  pinMode(giroizquierda, OUTPUT);
+  digitalWrite (destinofinal , LOW);
+  digitalWrite (aproxderecha, LOW);
+  digitalWrite (aproxizquierda, LOW);
+  digitalWrite (giroderecha, LOW);
+  digitalWrite (giroizquierda, LOW);
+  doblegirox = 0;
+  doblegiroy = 0;
+  j = 0;
+  v = 0;
+  actaproxarriba = 0;
+  actaproxabajo = 0;
+  actaproxizquierda = 0;
+  actaproxderecha = 0;
+// En el caso de que no sea posible la comunicación entre balizas:
+  if(Pozyx.begin() == POZYX_FAILURE){
+    //Serial.println(F("ERROR: Incapacaz de conectarse con baliza maestra"));
+    //Serial.println(F("Reinicio necesario"));
+    delay(100);
+    abort();
+  }
+
+  if(!remote){
+    remote_id = NULL;
+  }
+  // Elimina las posiciones fijas de antiguas configuraciones.
+  Pozyx.clearDevices(remote_id);
+  // Inicia la configuración manual.
+  setAnchorsManual();
+  // Aplica las posiciones dadas a cada id de baliza.
+  Pozyx.setPositionAlgorithm(algorithm, dimension, remote_id);
+
+//  printCalibrationResult();
+// Espera de 2 segundos para estabilizar proceso.
+  delay(2000);
+}
+
+void loop(){
+  coordinates_t position;
+  int status;
+  if(remote){
+    status = Pozyx.doRemotePositioning(remote_id, &position, dimension, height, algorithm);
+  }else{
+    status = Pozyx.doPositioning(&position, dimension, height, algorithm);
+  }
+
+  if (status == POZYX_SUCCESS){
+    // Muestra llas coordenadas de la baliza.
+    printCoordinates(position);
+  }else{
+    // Muestra el error.
+    printErrorCode("positioning");
+  }
+}
+
+// printCoordinates es la función principal del código, en la que realiamos la lectura de las coordenadas y sobre cada lectura se toma la decisión de giro.
+void printCoordinates(coordinates_t coor){
+  uint16_t network_id = remote_id;
+  if (network_id == NULL){
+    network_id = 0;
+  }
+  if(!use_processing){
+//    Serial.print(coor.x);
+//    Serial.print(coor.y);
+//    Serial.println(coor.z);
+  }else{
+    // Establecemos los rangos con los que trabajaremos.
+    rangoxinf = (int)0 - (int)800;
+    rangoxsup = (int)0 + (int)800;
+    rangoyinf = (int)1000 - (int)800;
+    rangoysup = (int)1000 + (int)800;
+    rangoxinfparoint = (int)0 - (int)300;
+    rangoxsupparoint = (int)0 + (int)300;
+    rangoyinfparoint = (int)1000 - (int)300;
+    rangoysupparoint = (int)1000 + (int)300;
+    rangoxinfparo = (int)0 - (int)1500;
+    rangoxsupparo = (int)0 + (int)1500;
+    rangoyinfparo = (int)1000 - (int)1500;
+    rangoysupparo = (int)1000 + (int)1500;
+    /////////////////////////////////////////////////////////////////////////////////////
+    // Bucle para realizar la media de 5 lecturas y disminuir ruido.
+     for (int i=0;i<=4;i++)
+  { 
+    coorxsuma = coor.x+coorxsuma;
+    coorysuma = coor.y+coorysuma;
+    j = j + 1 ;
+    v = v +1 ;
+    //Serial.println (distanciasuma);
+    delay(50);  
+  } 
+    // La lectura real se obtiene cada 250 ms.
+    coorxreal = coorxsuma / 5 ;
+    cooryreal = coorysuma / 5 ;
+    coorxsuma = 0;
+    coorysuma = 0;
+    i=0;
+    //////////////////////////////////////////////////////////////////////////////////////
+    // Dos bucles para inicializar variables si no se encuentra en rango de giro.
+    if (coorxreal < rangoxinfparo || coorxreal > rangoxsupparo ){
+        digitalWrite (destinofinal,LOW);
+        paro == 0;
+        doblegirox = 0;
+        doblegiroy = 0;
+        actaproxarriba = 0;
+        actaproxabajo = 0;
+        actaproxderecha = 0;
+        actaproxizquierda = 0; 
+        digitalWrite (aproxderecha, LOW);
+        digitalWrite (aproxizquierda, LOW);
+      }
+    if (cooryreal < rangoyinfparo || cooryreal > rangoysupparo) {       
+        digitalWrite (destinofinal,LOW);
+        paro == 0;
+        doblegirox = 0;
+        doblegiroy = 0;
+        actaproxarriba = 0;
+        actaproxabajo = 0;
+        actaproxderecha = 0;
+        actaproxizquierda = 0; 
+        digitalWrite (aproxderecha, LOW);
+        digitalWrite (aproxizquierda, LOW);
+      }
+    //////////////////////////////////////////////////////////////////////////////////////
+    // Conjunto de condiciones en las que el robot llega a su destino y se para.
+    if (coorxreal > rangoxinfparoint && coorxreal < rangoxsupparoint && cooryreal > rangoyinfparoint && cooryreal < rangoysupparoint) {
+      digitalWrite (destinofinal,HIGH);
+      paro == 1;
+      doblegirox = 0;
+      doblegiroy = 0;
+      actaproxarriba = 0;
+      actaproxabajo = 0;
+      actaproxderecha = 0;
+      actaproxizquierda = 0; 
+      digitalWrite (aproxderecha, LOW);
+      digitalWrite (aproxizquierda, LOW);
+    }
+    if (coorxreal > rangoxinfparo && coorxreal < rangoxsupparo && cooryreal > rangoyinfparo && cooryreal < rangoysupparo && paro == 1) {
+      digitalWrite (destinofinal,HIGH);
+    }   
+    ///////////////////////////////////////////////////////////////////////////////////////
+    // Conjunto de condiciones en las que el robot debe girar en un sentido u otro en función de su posición.
+    // Llegada por semieje Y positivo.
+    if ( rangoxsup > coorxreal && coorxreal > 0 && paro == 0) 
+    {
+      if ( 1000 < cooryreal && doblegirox == 0 ) {
+        //Tiene que hacer aproximación inicial a la izquierda de un segundo
+        digitalWrite (giroizquierda,HIGH);
+        doblegirox  = 1;
+        actaproxarriba = 1;
+        delay(1000);
+      }
+      if  ( 1000 > cooryreal && doblegirox == 0 ) {
+        //Tiene que hacer aproximación inicial a la derecha de un segundo
+        digitalWrite (giroderecha,HIGH);
+        doblegirox = 1;
+        actaproxabajo = 1;
+        delay(1000);
+      }
+    }  
+    digitalWrite(giroderecha,LOW);
+    digitalWrite(giroizquierda,LOW);
+    // LLegada por semieje Y negativo.
+    if (rangoxinf < coorxreal && coorxreal < 0 && paro == 0)
+    {
+       if ( 1000 < cooryreal && doblegirox == 0 ) {
+        //Tiene que hacer aproximación incial a la derecha de un segundo   
+        digitalWrite (giroderecha,HIGH);
+        doblegirox = 1;
+        actaproxarriba = 1;
+        delay(1000);
+      }
+       if  ( 1000 > cooryreal && doblegirox == 0 ) {
+        //Tiene que hacer aproximacion inicial a la izquierda de un segundo
+        digitalWrite (giroizquierda,HIGH);
+        doblegirox = 1;
+        actaproxabajo = 1;
+        delay(1000);  
+      }
+    }
+    digitalWrite(giroderecha,LOW);
+    digitalWrite(giroizquierda,LOW);
+    // Llegada por semieje X negativo.
+    if ( rangoyinf < cooryreal && cooryreal < 1000 && paro == 0) 
+    {
+      if ( 0 < coorxreal && doblegiroy == 0 ) {
+        //Tiene que hacer aproximación inicial a la izquierda de un segundo     
+        digitalWrite (giroizquierda,HIGH);
+        doblegiroy = 1;
+        actaproxderecha = 1;
+        delay(1000);   
+      }
+      if  ( 0 > coorxreal && doblegiroy == 0 ) {
+        //Tiene que hacer aproximación inicial a la derecha de un segundo
+        digitalWrite (giroderecha,HIGH);
+        doblegiroy = 1;
+        actaproxizquierda = 1;
+        delay(1000);
+      }
+    }
+    digitalWrite(giroderecha,LOW);
+    digitalWrite(giroizquierda,LOW);
+    // Llegada por semieje X positivo.
+    if ( rangoysup > cooryreal && cooryreal > 1000 && paro == 0) 
+    {
+      if ( 0 < coorxreal && doblegiroy == 0) {
+        //Tiene que hacer aproximación inicial a la derecha de un segundo
+        digitalWrite (giroderecha,HIGH);
+        doblegiroy = 1;
+        actaproxderecha = 1;
+        delay(1000);  
+      }
+      if  ( 0 > coorxreal && doblegiroy == 0) {
+        //Tiene que hacer aproximación inicial a la izquierda de un segundo
+        digitalWrite (giroizquierda,HIGH);
+        doblegiroy = 1;
+        actaproxizquierda = 1;
+        delay(1000);
+      }
+    }
+    // Refresco de señales digitales.    
+    digitalWrite(giroderecha,LOW);
+    digitalWrite(giroizquierda,LOW);
+    ///////////////////////////////////////////////////////////////////
+    // Comparaciones con el eje principal para realizar las aproximaciones en un sentido u otro hasta llegar al objetivo.
+    if (actaproxarriba == 1){
+      if (coor.x > 0){
+        digitalWrite (aproxderecha, HIGH);
+        digitalWrite (aproxizquierda, LOW);
+      }
+      if (coor.x < 0){
+        digitalWrite (aproxizquierda, HIGH);
+        digitalWrite (aproxderecha, LOW);
+      }
+    }
+    if (actaproxabajo == 1){
+      if (coor.x > 0 ){
+        digitalWrite (aproxizquierda, HIGH);
+        digitalWrite (aproxderecha, LOW);
+      }
+      if (coor.x < 0 ){
+        digitalWrite (aproxderecha, HIGH);
+        digitalWrite (aproxizquierda, LOW);
+      }
+    }
+    if (actaproxizquierda == 1){
+      if (coor.y > 1000){
+        digitalWrite (aproxderecha, HIGH);
+        digitalWrite (aproxizquierda, LOW);
+      }
+      if (coor.y < 1000){
+        digitalWrite (aproxizquierda, HIGH);
+        digitalWrite (aproxderecha, LOW);
+      }
+    }
+    if (actaproxderecha == 1){
+      if (coor.y > 1000){
+        digitalWrite (aproxizquierda, HIGH);
+        digitalWrite (aproxderecha, LOW);
+      }
+      if (coor.y < 1000){
+        digitalWrite (aproxderecha, HIGH);
+        digitalWrite (aproxizquierda, LOW);
+      }
+    }
+    // El envio de las coordenadas por el puerto serial se realizar cada segundo. 50ms*20 = 1000 ms
+    if (j == 20){
+      String myarray = (String)"{"+(int)coorxreal+"#"+(int)cooryreal+"#";
+      Serial.println(myarray);
+      j = 0;
+    }
+  }
+}
+
+// Función para mostras error por fallo espontaneo.
+void printErrorCode(String operation){
+  uint8_t error_code;
+  if (remote_id == NULL){
+    Pozyx.getErrorCode(&error_code);
+    Serial.print("ERROR ");
+    Serial.print(operation);
+    Serial.print(", Error Local: 0x");
+    Serial.println(error_code, HEX);
+    return;
+  }
+  int status = Pozyx.getErrorCode(&error_code, remote_id);
+  if(status == POZYX_SUCCESS){
+    Serial.print("ERROR ");
+    Serial.print(operation);
+    Serial.print(" en ID 0x");
+    Serial.print(remote_id, HEX);
+    Serial.print(", Codigo de error: 0x");
+    Serial.println(error_code, HEX);
+  }else{
+    Pozyx.getErrorCode(&error_code);
+    Serial.print("ERROR ");
+    Serial.print(operation);
+    Serial.print(", Imposible restablecer error, error local: 0x");
+    Serial.println(error_code, HEX);
+  }
+}
+
+// Función para mostrar en pamtalla las coordenadas configuradas al inicio del código.
+void printCalibrationResult(){
+  uint8_t list_size;
+  int status;
+
+  status = Pozyx.getDeviceListSize(&list_size, remote_id);
+  Serial.print("Tamaño de lista: ");
+  Serial.println(status*list_size);
+
+  if(list_size == 0){
+    printErrorCode("Configuracion");
+    return;
+  }
+
+  uint16_t device_ids[list_size];
+  status &= Pozyx.getDeviceIds(device_ids, list_size, remote_id);
+
+  Serial.println(F("Calibration result:"));
+  Serial.print(F("Anchors found: "));
+  Serial.println(list_size);
+
+  coordinates_t anchor_coor;
+  for(int i = 0; i < list_size; i++)
+  {
+    Serial.print("ANCHOR,");
+    Serial.print("0x");
+    Serial.print(device_ids[i], HEX);
+    Serial.print(",");
+    Pozyx.getDeviceCoordinates(device_ids[i], &anchor_coor, remote_id);
+    Serial.print(anchor_coor.x);
+    Serial.print(",");
+    Serial.print(anchor_coor.y);
+    Serial.print(",");
+    Serial.println(anchor_coor.z);
+    delay (500);
+  }
+}
+
+// fFunción para la calibración manual por RSSI (No utilizamos).
+void setAnchorsManual(){
+  for(int i = 0; i < num_anchors; i++){
+    device_coordinates_t anchor;
+    anchor.network_id = anchors[i];
+    anchor.flag = 0x1;
+    anchor.pos.x = anchors_x[i];
+    anchor.pos.y = anchors_y[i];
+    anchor.pos.z = heights[i];
+    Pozyx.addDevice(anchor, remote_id);
+  }
+  if (num_anchors > 4){
+    Pozyx.setSelectionOfAnchors(POZYX_ANCHOR_SEL_AUTO, num_anchors, remote_id);
+  }
+}
