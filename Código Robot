@@ -1,0 +1,453 @@
+
+#include <Wire.h>
+#include "PinChangeInterrupt.h"
+#define SONAR_NUM     5 //numero de sensores
+#define SOUND_SPD 344 //velocidad del sonido
+int sumadist1 = 0;//Guarda la suma de la distancia del sensor 0 y 3.
+int sumadist2 = 0;//Guarda la suma de la distancia del sensor 0 y 3.
+int min_distance = 0;//Guarda la distancia minima de todos los sensores
+int closer_sensor = 0;//Dice el sensor mas cercano
+int Cadena = 30;
+String sResultado, sEspacios;
+int iContador;
+const int PinTrig=3;
+const int PinEcho=2;
+const int PinTrig1=7;
+const int PinEcho1=13;
+const int PinTrig2=8;
+const int PinEcho2=9;
+//Avance derecha
+const int PinTrig3=31;
+const int PinEcho3=33;
+//Avance izquierda
+const int PinTrig4=37;
+const int PinEcho4=39;
+const float VelSon=34000.0;
+int distancia;
+int distanciasuma = 0;
+int distanciaReal = 0;
+int distanciaavanceder;
+int distanciasumaavanceder = 0;
+int distanciaRealavanceder = 0;
+int distanciaavanceizq;
+int distanciasumaavanceizq = 0;
+int distanciaRealavanceizq = 0;
+int distanciasumaizq = 0;
+int distanciasumader = 0;
+int distanciaRealizq = 0;
+int distanciaRealder = 0;
+int distanciaizq;
+int distanciader;
+int i = 0;
+int k = 0;
+int j = 0;
+int z = 0;
+int x = 0;
+int paro = 0;
+int comienzoaprox = 0;
+int giroderecha;
+int giroizquierda;
+int destinofinal;
+int aproxderecha;
+int aproxizquierda;
+volatile unsigned long t_inicio; //Tiempo en el que se inicia el pin echo.
+volatile unsigned long t_fin;//Tiempo en el que se termina de escuchar el pin echo.
+volatile int cm[SONAR_NUM];//Guarda las distancias de los distintos sensores.
+volatile int currentSensor = 0;//Guarda el sensor activo.
+//Variables y pines que controlan los motores.
+int count = 0;
+int data [2];
+int t= 0;
+const uint8_t E1 = 5;//M1 control de velocidad del motor izquierdo.
+const uint8_t E2 = 10;//M2 control de velocidad del motor derecho.
+const uint8_t M1 = 6;//M1 control de dirección.
+const uint8_t M2 = 11;//M2 control de dirección.
+
+//Constantes del control de los motores.
+const bool FORWARD = LOW;//direccion del motor (hacia detras).
+const bool BACKWARD = HIGH;//direccion del motor(ahcia delante).
+int last_speed_LEFT = 35;//guarda la ultima velocidad del motor izquierdo.
+int last_speed_RIGHT = 35;//guarda la ultima velocidad del motor derecho.
+int speed_LEFT, speed_RIGHT;//velocidad actual del motor izquierdo y derecho.
+int direct = 200;//constante de maxima velocidad.
+int back   =  10;//constante de minima velocidad.
+int forward = 170; //constante de velocidad media.
+
+void receiveData(int byteCount) {
+  while (Wire.available()) { //Cuando se active la comunicacion I2c guardamos el primer dato enviado en la variable data[0] y la segunda en data[1].
+    if (count == 0) {
+      data[0] = Wire.read();
+      count = 1;
+    }
+    if (count == 1) {
+      data[1] = Wire.read();
+      count = 0;
+    }
+  }
+}
+
+void setup() { //Inicializamos los pines de los sensores como salida.
+  Serial.begin(9600);//Iniciamos comunicacion serial.
+  //Declaramos Pines.
+  pinMode(PinTrig, OUTPUT);
+  pinMode(PinEcho, INPUT);
+  pinMode(PinTrig1, OUTPUT);
+  pinMode(PinEcho1, INPUT);
+  pinMode(PinTrig2, OUTPUT);
+  pinMode(PinEcho2, INPUT);
+  pinMode(PinTrig3, OUTPUT);
+  pinMode(PinEcho3, INPUT);
+  pinMode(PinTrig4, OUTPUT);
+  pinMode(PinEcho4, INPUT);
+  
+  //configuramos el puerto I2c y la interrupcion
+  Wire.begin(0x04);
+  Wire.onReceive(receiveData);// LLamada para inicializar i2C. Salta para evitar recieveDara().
+  
+  //Inicializamos los pines de los motores como salida.
+  pinMode(E1, OUTPUT);
+  pinMode(E2, OUTPUT);
+  pinMode(M1, OUTPUT);
+  pinMode(M2, OUTPUT);
+  delay(100); // Dejamos a los sensores de arduino descansar.
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//// INICIAMOS TRIGGERS DE LOS ULTRASONIDOS//////////////////////////////////////////////////////////////////////
+void iniciarTrigger()
+{
+  // Ponemos el Trigger en estado bajo y esperamos 2 ms
+  digitalWrite(PinTrig, LOW);
+  delayMicroseconds(2);
+  // Ponemos el pin Trigger a estado alto y esperamos 10 ms
+  digitalWrite(PinTrig, HIGH);
+  delayMicroseconds(10);
+  // Comezamos poniendo elpin Trigger en estado bajo
+  digitalWrite(PinTrig, LOW);
+}
+void iniciarTrigger1()
+{
+  // Ponemos el Trigger en estado bajo y esperamos 2 ms
+  digitalWrite(PinTrig1, LOW);
+  delayMicroseconds(2);
+  // Ponemos el pin Trigger a estado alto y esperamos 10 ms
+  digitalWrite(PinTrig1, HIGH);
+  delayMicroseconds(10);
+  // Comezamos poniendo elpin Trigger en estado bajo
+  digitalWrite(PinTrig1, LOW);
+}
+void iniciarTrigger2()
+{
+  // Ponemos el Trigger en estado bajo y esperamos 2 ms
+  digitalWrite(PinTrig2, LOW);
+  delayMicroseconds(2);
+  // Ponemos el pin Trigger a estado alto y esperamos 10 ms
+  digitalWrite(PinTrig2, HIGH);
+  delayMicroseconds(10);
+  // Comezamos poniendo elpin Trigger en estado bajo
+  digitalWrite(PinTrig2, LOW);
+}
+void iniciarTrigger3()
+{
+  // Ponemos el Trigger en estado bajo y esperamos 2 ms
+  digitalWrite(PinTrig3, LOW);
+  delayMicroseconds(2);
+  // Ponemos el pin Trigger a estado alto y esperamos 10 ms
+  digitalWrite(PinTrig3, HIGH);
+  delayMicroseconds(10);
+  // Comezamos poniendo elpin Trigger en estado bajo
+  digitalWrite(PinTrig3, LOW);
+}
+void iniciarTrigger4()
+{
+  // Ponemos el Trigger en estado bajo y esperamos 2 ms
+  digitalWrite(PinTrig4, LOW);
+  delayMicroseconds(2);
+  // Ponemos el pin Trigger a estado alto y esperamos 10 ms
+  digitalWrite(PinTrig4, HIGH);
+  delayMicroseconds(10);
+  // Comezamos poniendo elpin Trigger en estado bajo
+  digitalWrite(PinTrig4, LOW);
+}
+void loop() {  
+  //Para sensor frontal
+  for (int i=0;i<=4;i++)
+  { 
+    iniciarTrigger();
+    unsigned long tiempo = pulseIn(PinEcho, HIGH);
+    distancia = tiempo * 0.000001 * VelSon / 2.0; 
+    distanciasuma = distancia+distanciasuma;
+    delay(3);  
+  } 
+    distanciaReal = distanciasuma / 5 ;
+    Serial.println(distanciaReal);
+    distanciasuma = 0;
+    i=0;
+  // Para sensor frontal derecho
+  for (int z=0;z<=1;z++)
+  { 
+    iniciarTrigger3();
+    unsigned long tiempo3 = pulseIn(PinEcho3, HIGH);
+    distanciaavanceder = tiempo3 * 0.000001 * VelSon / 2.0; 
+    distanciasumaavanceder = distanciaavanceder+distanciasumaavanceder;
+    delay(3);  
+  } 
+    distanciaRealavanceder = distanciasumaavanceder / 2 ;
+    Serial.println(distanciaRealavanceder);
+    distanciasumaavanceder = 0;
+    z=0;
+   // Para sensor frontal izquierdo
+   for (int x=0;x<=1;x++)
+  { 
+    iniciarTrigger4();
+    unsigned long tiempo4 = pulseIn(PinEcho4, HIGH);
+    distanciaavanceizq = tiempo4 * 0.000001 * VelSon / 2.0; 
+    distanciasumaavanceizq = distanciaavanceizq+distanciasumaavanceizq;
+    delay(3);  
+  } 
+    distanciaRealavanceizq = distanciasumaavanceizq / 2 ;
+    //Serial.println(distanciaReal);
+    distanciasumaavanceizq = 0;
+    x=0;   
+  if (data[0] == 1) { //modo Regreso 
+        aproxizquierda = digitalRead (49);
+        aproxderecha = digitalRead (47);
+        destinofinal = digitalRead (45);
+        giroizquierda = digitalRead (23);
+        giroderecha = digitalRead (43);
+        if (comienzoaprox == 0){
+        speed_LEFT  = 145;
+        speed_RIGHT = 140;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        }
+          if ( giroderecha == HIGH && comienzoaprox == 0){
+            //Aproximación derecha hasta objetivo
+            comienzoaprox = 1;
+            speed_LEFT  =  140;
+            speed_RIGHT =  0;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+            delay(1200);
+            } 
+          if ( giroizquierda == HIGH && comienzoaprox == 0){
+            //Aproximación derecha hasta objetivo
+            comienzoaprox = 1;
+            speed_LEFT  =  0;
+            speed_RIGHT =  140;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+            delay(1200);
+            } 
+
+          if ( aproxderecha == HIGH){
+            //Aproximación derecha hasta objetivo
+            speed_LEFT  =  150;
+            speed_RIGHT =  100;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+            } 
+          if ( aproxizquierda == HIGH){
+            //Aproximación derecha hasta objetivo
+            speed_LEFT  =  100;
+            speed_RIGHT =  150;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+            } 
+           if (destinofinal == HIGH) {
+            //stopm
+            speed_LEFT  = 0;
+            speed_RIGHT = 0;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT)); 
+           }
+        distanciasumaizq = 0;
+        distanciasumader = 0;
+        k  = 0;
+        j = 0;     
+      }      
+
+  else if (data[0] == 2) { //modo manual
+    if (data[1] == 0) {
+      //stopm
+      speed_LEFT  = 0;
+      speed_RIGHT = 0;
+      digitalWrite(M2, FORWARD);
+      digitalWrite(M1, FORWARD);
+      analogWrite (E2, abs(speed_RIGHT));
+      analogWrite (E1, abs(speed_LEFT)); 
+      comienzoaprox = 0;
+    }
+    else {
+      if (data[1] == 1) { //si el dato [1] es 1 giramos a la izquierda
+        speed_LEFT  = 0 ;
+        speed_RIGHT =  120;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT)); 
+        comienzoaprox = 0;
+        if (distanciaReal <50) {
+        speed_LEFT  = -85 ;
+        speed_RIGHT =  -85;
+        digitalWrite(M2, BACKWARD);
+        digitalWrite(M1, BACKWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        delay(150);
+        }
+      }
+      else if (data[1] == 2) { //si el dato [1] es 2 giramos a la derecha
+        speed_LEFT  = 120 ;
+        speed_RIGHT =  0;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT)); 
+        comienzoaprox = 0;
+         if (distanciaReal <50) {
+        speed_LEFT  = -85 ;
+        speed_RIGHT =  -85;
+        digitalWrite(M2, BACKWARD);
+        digitalWrite(M1, BACKWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        delay(150);
+        }
+      }
+      else if (data[1] == 3) { //si el dato [1] es 3 realizamos un giro leve a la izquierda
+        speed_LEFT  = 60 ;
+        speed_RIGHT =  140;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        comienzoaprox = 0;
+        if (distanciaReal <50) {
+        speed_LEFT  = -85 ;
+        speed_RIGHT =  -85;
+        digitalWrite(M2, BACKWARD);
+        digitalWrite(M1, BACKWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        delay(150);
+        }
+      }
+      else if (data[1] == 4) { //si el dato [1] es 4 realizamos un giro leve a la derecha
+        speed_LEFT  =  140;
+        speed_RIGHT =  60;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        comienzoaprox = 0;
+         if (distanciaReal <50) {
+          speed_LEFT  = -85 ;
+          speed_RIGHT =  -85;
+          digitalWrite(M2, BACKWARD);
+          digitalWrite(M1, BACKWARD);
+          analogWrite (E2, abs(speed_RIGHT));
+          analogWrite (E1, abs(speed_LEFT));
+          delay(150);
+        }
+      }
+      else if (data[1] == 5) { //si el dato [1] es 5 establecemos que ira recto
+        t=0;
+        speed_LEFT  = 165 ;
+        speed_RIGHT =  160;
+        digitalWrite(M2, FORWARD);
+        digitalWrite(M1, FORWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        comienzoaprox = 0;
+          if (distanciaReal <50) {
+            decision();
+            delay(500);
+          }  
+          if (distanciaRealavanceder < 25) {
+            decision();
+            delay(200);
+          } 
+          if (distanciaRealavanceizq < 25) {
+            decision();
+            delay(200);
+          } 
+          
+        distanciasumaizq = 0;
+        distanciasumader = 0;
+        k  = 0;
+        j = 0;     
+      }
+      else if (data[1] == 6) { //si el dato [1] es 6 establecemos que ira hacia detras
+        speed_LEFT  = -85 ;
+        speed_RIGHT =  -85;
+        digitalWrite(M2, BACKWARD);
+        digitalWrite(M1, BACKWARD);
+        analogWrite (E2, abs(speed_RIGHT));
+        analogWrite (E1, abs(speed_LEFT));
+        comienzoaprox = 0;
+      }
+    }
+  }
+  
+  else {
+    //stopm
+    speed_LEFT  = 0;
+    speed_RIGHT = 0;
+    digitalWrite(M2, FORWARD);
+    digitalWrite(M1, FORWARD);
+    analogWrite (E2, abs(speed_RIGHT));
+    analogWrite (E1, abs(speed_LEFT));    
+  }
+}
+/// Función que realiza la lectura de los sensores laterales para decidir hacia que sentido girar. Se llama a esta función cuando el sensor frontoal detecta un obstáculo.
+void decision() {
+    for (int k=0;k<=4;k++)
+  { 
+    iniciarTrigger1();
+    unsigned long tiempo1 = pulseIn(PinEcho1, HIGH);
+    distanciaizq = tiempo1 * 0.000001 * VelSon / 2.0; 
+    distanciasumaizq = distanciaizq+distanciasumaizq;
+    delay(3);  
+  } 
+  distanciaRealizq = distanciasumaizq / 5 ;
+    for (int j=0;j<=4;j++)
+  { 
+    iniciarTrigger2();
+    unsigned long tiempo2 = pulseIn(PinEcho2, HIGH);
+    distanciader = tiempo2 * 0.000001 * VelSon / 2.0; 
+    distanciasumader = distanciader+distanciasumader;
+    delay(3);  
+  } 
+  distanciaRealder = distanciasumader / 5 ;
+  //Comparaciones para decidir sentido de giro.
+  if (distanciaRealder <= distanciaRealizq) {
+            speed_LEFT  = 50;
+            speed_RIGHT = 50;
+            digitalWrite(M2, FORWARD);
+            digitalWrite(M1, BACKWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+  }
+  else if (distanciaRealder > distanciaRealizq) {
+            speed_LEFT  = 50;
+            speed_RIGHT = 50;
+            digitalWrite(M2, BACKWARD);
+            digitalWrite(M1, FORWARD);
+            analogWrite (E2, abs(speed_RIGHT));
+            analogWrite (E1, abs(speed_LEFT));
+  } 
+}
+
+
