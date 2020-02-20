@@ -1,0 +1,36 @@
+import serial
+import mysql.connector
+coorx=0
+coory=0
+#Definicion del puerto al que esta conectado el arduino y de la velocidad de transmision
+arduino = serial.Serial('/dev/ttyACM1',115200)
+#Función que recibe el string enviado por Arduino-Pozyx
+def cad_proc(cad):
+    print(cad)
+    # Localiza el comienzo del string por un caracter en concreto
+    i=cad.find("{")
+    i=i+1
+    print (i)
+    cad= cad[i:].split("#")
+    coorx = cad[0]
+    coory = cad[1]
+    send_mysql(coorx,coory)
+#Función que conecta con la base de datos
+def send_mysql(coorx,coory):
+    cnx = mysql.connector.connect(user='root', password='raspberryURJC', 
+                                  host='127.0.0.1', database='TFGbomberos',
+                                  charset = "utf8")
+    c = cnx.cursor()
+    #Instrucción que subo los datos a las columnas indicas.
+    query="Insert into pozyx(coorx, coory,Hora,Fecha) VALUES ("+str(coorx)+","+str(coory)+",CURTIME(),CURDATE());"
+    c.execute(query)
+    cnx.commit()
+    c.close()
+    cnx.close()
+
+while True:
+    line = arduino.readline()
+    #Extraccion y organizacion de los datos
+    cad_proc(line)
+#Finalizacion de la conexion con arduino
+arduino.close()
